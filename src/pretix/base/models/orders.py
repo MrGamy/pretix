@@ -1810,13 +1810,9 @@ class OrderFee(models.Model):
             self.tax_rule = self.order.event.settings.tax_rate_default
 
         if self.tax_rule:
-            if self.tax_rule.tax_applicable(ia):
-                tax = self.tax_rule.tax(self.value, base_price_is='gross')
-                self.tax_rate = tax.rate
-                self.tax_value = tax.tax
-            else:
-                self.tax_value = Decimal('0.00')
-                self.tax_rate = Decimal('0.00')
+            tax = self.tax_rule.tax(self.value, base_price_is='gross', invoice_address=ia)
+            self.tax_rate = tax.rate
+            self.tax_value = tax.tax
         else:
             self.tax_value = Decimal('0.00')
             self.tax_rate = Decimal('0.00')
@@ -1963,13 +1959,9 @@ class OrderPosition(AbstractPosition):
         except InvoiceAddress.DoesNotExist:
             ia = None
         if self.tax_rule:
-            if self.tax_rule.tax_applicable(ia):
-                tax = self.tax_rule.tax(self.price, base_price_is='gross')
-                self.tax_rate = tax.rate
-                self.tax_value = tax.tax
-            else:
-                self.tax_value = Decimal('0.00')
-                self.tax_rate = Decimal('0.00')
+            tax = self.tax_rule.tax(self.price, invoice_address=ia, base_price_is='gross')
+            self.tax_rate = tax.rate
+            self.tax_value = tax.tax
         else:
             self.tax_value = Decimal('0.00')
             self.tax_rate = Decimal('0.00')
@@ -2108,6 +2100,10 @@ class CartPosition(AbstractPosition):
     includes_tax = models.BooleanField(
         default=True
     )
+    override_tax_rate = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        null=True, blank=True
+    )
     is_bundled = models.BooleanField(default=False)
 
     objects = ScopedManager(organizer='event__organizer')
@@ -2124,6 +2120,8 @@ class CartPosition(AbstractPosition):
     @property
     def tax_rate(self):
         if self.includes_tax:
+            if self.override_tax_rate is not None:
+                return self.override_tax_rate
             return self.item.tax(self.price, base_price_is='gross').rate
         else:
             return Decimal('0.00')
@@ -2131,7 +2129,7 @@ class CartPosition(AbstractPosition):
     @property
     def tax_value(self):
         if self.includes_tax:
-            return self.item.tax(self.price, base_price_is='gross').tax
+            return self.item.tax(self.price, override_tax_rate=self.override_tax_rate, base_price_is='gross').tax
         else:
             return Decimal('0.00')
 
